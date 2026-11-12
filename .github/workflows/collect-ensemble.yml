@@ -1,0 +1,30 @@
+# Saves each morning's ensemble weather forecasts (needed later for Monte Carlo).
+# Files go to a monthly GitHub Release (e.g. "ensemble-2026-11"), not into git,
+# so the repo stays small. Open-Meteo needs no key.
+name: collect-ensemble
+
+on:
+  schedule:
+    - cron: "17 13 * * *"   # 13:17 UTC = 8:17 am EST / 9:17 am EDT, before the 10 am issue time
+  workflow_dispatch:         # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write            # needed to create releases and upload files
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --no-dev
+      - run: uv run python -m gridfc.collect_ensemble --out data/ensemble
+      - name: Upload to this month's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ensemble-$(date -u +%Y-%m)"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TAG" --notes "Daily ensemble weather snapshots for $TAG"
+          gh release upload "$TAG" data/ensemble/*.parquet --clobber
