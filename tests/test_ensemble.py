@@ -26,3 +26,21 @@ def test_parse_column_variants():
     assert parse_column("cloud_cover_ecmwf_ifs025_ensemble") == ("cloud_cover", 0, "ecmwf_ifs025_ensemble")
     assert parse_column("temperature_2m_member03_ecmwf_ifs025_ensemble") == ("temperature_2m", 3, "ecmwf_ifs025_ensemble")
     assert parse_column("time") is None
+
+
+def test_second_pass_recovers_failed_city(monkeypatch, tmp_path):
+    import gridfc.collect_ensemble as ce
+    calls = {}
+
+    def flaky_fetch(lat, lon, models):
+        calls[lat] = calls.get(lat, 0) + 1
+        if lat == 41.88 and calls[lat] == 1:  # Chicago fails on the first pass only
+            raise RuntimeError("gave up")
+        return {"hourly": {"time": ["2026-11-12T00:00"], "temperature_2m": [1.0]}}
+
+    monkeypatch.setattr(ce, "fetch", flaky_fetch)
+    monkeypatch.setattr(ce.time, "sleep", lambda s: None)
+    monkeypatch.setattr("sys.argv", ["x", "--out", str(tmp_path)])
+    ce.main()
+    df = pd.read_parquet(next(tmp_path.glob("*.parquet")))
+    assert df["subba"].nunique() == 10 and calls[41.88] == 2

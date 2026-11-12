@@ -93,16 +93,8 @@ def to_long(payload, subba, issued_at, default_model):
     return wide
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="data/ensemble")
-    args = ap.parse_args()
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    issued_at = pd.Timestamp(dt.datetime.now(dt.timezone.utc)).floor("h")
-
-    frames, failed = [], []
-    for subba, (city, lat, lon) in WEATHER_POINTS.items():
+def _collect(todo, issued_at, frames, failed):
+    for subba, (city, lat, lon) in todo:
         try:
             try:
                 payload, model_label = fetch(lat, lon, MODELS), None
@@ -118,6 +110,29 @@ def main():
         print(f"{city}: {len(df):,} rows, models {sorted(df['model'].unique())}, "
               f"members {df['member'].nunique()}", flush=True)
         time.sleep(1)
+
+    return frames, failed
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="data/ensemble")
+    args = ap.parse_args()
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    issued_at = pd.Timestamp(dt.datetime.now(dt.timezone.utc)).floor("h")
+
+    frames, failed = [], []
+    todo = list(WEATHER_POINTS.items())
+    for pass_no in (1, 2):
+        if pass_no == 2:
+            if not failed:
+                break
+            print(f"Second pass for {failed} in 60s ...", flush=True)
+            time.sleep(60)
+            todo = [(sb, pt) for sb, pt in WEATHER_POINTS.items() if pt[0] in failed]
+            failed = []
+        frames, failed = _collect(todo, issued_at, frames, failed)
 
     if not frames:
         raise SystemExit("All cities failed; nothing saved.")
