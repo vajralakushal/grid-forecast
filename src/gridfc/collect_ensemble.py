@@ -46,19 +46,27 @@ def parse_column(col):
     return var, member, model
 
 
-def fetch(lat, lon, models):
+def fetch(lat, lon, models, tries=5):
+    """GET with retries on timeouts, connection errors, 429 and 5xx (with backoff)."""
     params = {"latitude": lat, "longitude": lon, "hourly": ",".join(VARS),
               "forecast_days": FORECAST_DAYS, "timezone": "GMT"}
     if models:
         params["models"] = ",".join(models)
-    for i in range(4):
-        r = requests.get(URL, params=params, timeout=120)
-        if r.status_code == 200:
-            return r.json()
-        if r.status_code == 400:
-            raise ValueError(r.text[:300])
-        time.sleep(2 ** i)
-    r.raise_for_status()
+    last = ""
+    for i in range(tries):
+        try:
+            r = requests.get(URL, params=params, timeout=(10, 60))  # (connect, read) seconds
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 400:
+                raise ValueError(r.text[:300])
+            last = f"HTTP {r.status_code}: {r.text[:200]}"
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last = type(e).__name__
+        wait = min(5 * 2 ** i, 60)
+        print(f"  attempt {i + 1}/{tries} failed ({last}); waiting {wait}s", flush=True)
+        time.sleep(wait)
+    raise RuntimeError(f"gave up after {tries} attempts: {last}")
 
 
 def to_long(payload, subba, issued_at, default_model):
@@ -93,23 +101,32 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     issued_at = pd.Timestamp(dt.datetime.now(dt.timezone.utc)).floor("h")
 
-    frames = []
+    frames, failed = [], []
     for subba, (city, lat, lon) in WEATHER_POINTS.items():
         try:
-            payload, model_label = fetch(lat, lon, MODELS), None
-        except ValueError as e:  # model names changed? fall back to the default ensemble
-            print(f"{city}: models rejected ({e}); using Open-Meteo default")
-            payload, model_label = fetch(lat, lon, None), "default"
+            try:
+                payload, model_label = fetch(lat, lon, MODELS), None
+            except ValueError as e:  # model names changed? fall back to the default ensemble
+                print(f"{city}: models rejected ({e}); using Open-Meteo default")
+                payload, model_label = fetch(lat, lon, None), "default"
+        except RuntimeError as e:
+            print(f"{city}: FAILED ({e}); continuing with the other cities", flush=True)
+            failed.append(city)
+            continue
         df = to_long(payload, subba, issued_at, model_label or MODELS[0])
         frames.append(df)
         print(f"{city}: {len(df):,} rows, models {sorted(df['model'].unique())}, "
               f"members {df['member'].nunique()}", flush=True)
         time.sleep(1)
 
+    if not frames:
+        raise SystemExit("All cities failed; nothing saved.")
     all_df = pd.concat(frames, ignore_index=True)
     path = out / f"ensemble_{issued_at:%Y%m%dT%H}Z.parquet"
     all_df.to_parquet(path, index=False, compression="zstd")
     print(f"wrote {path} ({len(all_df):,} rows, {path.stat().st_size / 1e6:.2f} MB)")
+    if failed:
+        print(f"WARNING: missing cities this run: {failed}")
 
 
 if __name__ == "__main__":
