@@ -1,0 +1,11 @@
+# secrets: never commit
+.env
+# local data and environments
+data/
+*.duckdb
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+.pytest_cache/
