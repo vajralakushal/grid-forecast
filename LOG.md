@@ -54,3 +54,13 @@ Newest at the bottom. Plain language.
 - Run time: 8 backtests in parallel in ~18 min; `timesfm3` 818 s, `chronos2` 520 s (CPU, 2 threads each).
 - Part 2 report: `uv run python reports/build_models.py` -> `reports/out/models_YYYY-MM-DD.pdf`.
 - Next: live daily forecasts this winter (timesfm3, chronos2, lgbm, a fixed average) saved before actuals arrive, as the clean test; better covariates for the pretrained models; drop Prophet and MSTL.
+
+## Nov 15, 2026 (later): is the gap real, peaks, CI, public repo
+
+- Significance (daily MAPE difference vs PJM, Diebold-Mariano with 7-day Newey-West, 7-day block bootstrap): `timesfm3` minus PJM = -0.07 points/day, 95% CI -0.26 to +0.10, p = 0.44. A tie overall. Summer (Jun-Aug) -0.62, p = 0.001; winter (Dec-Feb) +0.37, p = 0.051. `chronos2`, `lgbm`, `linear` are significantly worse than PJM.
+- Daily peaks: PJM 1.87% peak-size error, `timesfm3` 2.74%, `lgbm` 3.28%. Peak hour exactly right: `timesfm3` 63.3% of days, PJM 63.0%; within 1 hour: PJM 88.9%, `timesfm3` 84.4%. PJM as published gets the peak hour right on 12.5% of days, more evidence of the 1-hour label shift.
+- Harness: holiday types (`cal_hol_major`, `cal_hol_minor`, `cal_hol_near` for Dec 24, Dec 26-31, Friday after Thanksgiving). Experiment running: pretrained models with all 6 weather variables + holiday types (`timesfm3_full`, `chronos2_full`).
+- Weather fetch now also asks for humidity, precipitation, snowfall, sea-level pressure (needs `fetch_weather --only forecast --refresh-all`). Open-Meteo docs say GFS 2 m temperature forecasts go back to March 2021: a way to get honest forecast weather for more cold snaps (Winter Storm Elliott, Dec 2022).
+- Model libraries moved to a `models` dependency group; the ensemble collector installs only the core (`uv sync --no-default-groups`). Linux gets CPU-only torch (no CUDA downloads in Actions).
+- CI (`.github/workflows/ci.yml`) runs the offline tests on every push. README rewritten with results; `scripts/readme_figures.py` draws its figures.
+- Repo made public. Data stays EIA + Open-Meteo so anyone can reproduce results.

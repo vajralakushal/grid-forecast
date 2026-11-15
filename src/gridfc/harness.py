@@ -58,6 +58,7 @@ def calendar_features(idx: pd.DatetimeIndex) -> pd.DataFrame:
         "cal_doy": local.dayofyear,
         "cal_weekend": (local.dayofweek >= 5).astype(int),
         "cal_holiday": holiday_flags(local),
+        **holiday_types(local),
     }, index=idx)
 
 
@@ -67,6 +68,39 @@ def holiday_flags(local: pd.DatetimeIndex) -> np.ndarray:
     days = local.tz_localize(None).normalize()
     hol = USFederalHolidayCalendar().holidays(days.min(), days.max())
     return days.isin(hol).astype(int)
+
+
+# most businesses close on these; the other federal holidays are partly working days
+MAJOR_HOLIDAYS = {"New Year's Day", "Memorial Day", "Independence Day", "Labor Day",
+                  "Thanksgiving Day", "Christmas Day"}
+
+
+def holiday_types(local: pd.DatetimeIndex) -> dict:
+    """Holidays split by how much they cut load.
+
+    cal_hol_major: offices and factories mostly closed (Christmas, Thanksgiving, ...).
+    cal_hol_minor: federal holidays many businesses work (MLK, Presidents', Columbus,
+                   Veterans, Juneteenth).
+    cal_hol_near:  not holidays, but load runs low: Dec 24, Dec 26-31, and the Friday
+                   after Thanksgiving.
+    """
+    from pandas.tseries.holiday import USFederalHolidayCalendar
+    days = local.tz_localize(None).normalize()
+    start, end = days.min(), days.max()
+    major, minor = set(), set()
+    names = {r.name for r in USFederalHolidayCalendar.rules}
+    assert MAJOR_HOLIDAYS <= names, MAJOR_HOLIDAYS - names  # pandas renames rules sometimes
+    for rule in USFederalHolidayCalendar.rules:
+        dates = set(rule.dates(start - pd.Timedelta(days=7), end + pd.Timedelta(days=7)))
+        (major if rule.name in MAJOR_HOLIDAYS else minor).update(dates)
+    thanksgiving = {d for d in major if d.month == 11}
+    near = {d + pd.Timedelta(days=1) for d in thanksgiving}
+    for y in range(start.year, end.year + 1):
+        near.update(pd.Timestamp(y, 12, d) for d in [24, 26, 27, 28, 29, 30, 31])
+    near -= major | minor
+    return {"cal_hol_major": days.isin(list(major)).astype(int),
+            "cal_hol_minor": days.isin(list(minor)).astype(int),
+            "cal_hol_near": days.isin(list(near)).astype(int)}
 
 
 def allowed_features(frame: pd.DataFrame) -> pd.DataFrame:

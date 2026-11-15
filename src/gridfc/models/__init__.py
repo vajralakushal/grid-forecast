@@ -1,7 +1,7 @@
 from .baselines import SeasonalNaive
 from .gbm import LightGBMQuantile
 from .linear import LinearTemperature
-from .pretrained import Chronos2, TimesFM3
+from .pretrained import COVARIATES_FULL, Chronos2, TimesFM3
 from .prophet_model import ProphetModel
 from .stats import MSTLModel
 
@@ -20,4 +20,7 @@ REGISTRY = {
     "chronos2_uni": lambda: Chronos2(name="chronos2_uni", covariates=()),
     "timesfm3": lambda: TimesFM3(),
     "timesfm3_uni": lambda: TimesFM3(name="timesfm3_uni", covariates=()),
+    # all six forecast weather variables + holiday types (Nov 15 experiment)
+    "chronos2_full": lambda: Chronos2(name="chronos2_full", covariates=COVARIATES_FULL),
+    "timesfm3_full": lambda: TimesFM3(name="timesfm3_full", covariates=COVARIATES_FULL),
 }

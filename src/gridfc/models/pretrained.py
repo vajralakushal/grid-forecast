@@ -11,6 +11,11 @@ from ..harness import ALLOWED_WEATHER_PREFIX, QCOLS, QUANTILES
 
 COVARIATES = [ALLOWED_WEATHER_PREFIX + "temperature_2m",
               ALLOWED_WEATHER_PREFIX + "apparent_temperature", "cal_holiday"]
+# every forecast weather variable plus holiday types instead of one flag
+WX_ALL = ["temperature_2m", "dew_point_2m", "apparent_temperature", "cloud_cover",
+          "wind_speed_10m", "shortwave_radiation"]
+COVARIATES_FULL = ([ALLOWED_WEATHER_PREFIX + v for v in WX_ALL]
+                   + ["cal_hol_major", "cal_hol_minor", "cal_hol_near"])
 
 
 def context(y, X_hist, X_future, hours, covariates):

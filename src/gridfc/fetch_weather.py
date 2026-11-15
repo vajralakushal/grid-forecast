@@ -31,7 +31,9 @@ PREVIOUS_RUNS_URLS = [
     "https://historical-forecast-api.open-meteo.com/v1/forecast",
 ]
 FORECAST_VARS = ["temperature_2m", "dew_point_2m", "apparent_temperature",
-                 "cloud_cover", "wind_speed_10m", "shortwave_radiation"]
+                 "cloud_cover", "wind_speed_10m", "shortwave_radiation",
+                 # added Nov 15, 2026 (needs --refresh-all once)
+                 "relative_humidity_2m", "precipitation", "snowfall", "pressure_msl"]
 LEAD_DAYS = [1, 2]
 
 KINDS = {

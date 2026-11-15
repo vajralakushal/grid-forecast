@@ -20,7 +20,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv sync --no-dev
+      - run: uv sync --no-default-groups   # no model libraries needed here
       - name: Collect (up to 3 tries, 5 min apart, if the API is down)
         run: |
           for attempt in 1 2 3; do

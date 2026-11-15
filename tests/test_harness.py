@@ -90,3 +90,18 @@ def test_future_from_cutoff():
     out = harness.run_backtest(GapSpy(), make_frame(), "2025-01-10", "2025-01-12", verbose=False)
     assert len(out) == 3 * 24
     assert out["lead_h"].between(14, 38).all()
+
+
+def test_holiday_types():
+    idx = pd.date_range("2025-11-26", "2026-01-02 23:00", freq="h", tz=harness.TZ_PJM).tz_convert("UTC")
+    cal = harness.calendar_features(idx)
+    day = idx.tz_convert(harness.TZ_PJM).strftime("%m-%d")
+    by_day = cal.groupby(day)[["cal_hol_major", "cal_hol_minor", "cal_hol_near"]].max()
+    assert by_day.loc["11-27"].tolist() == [1, 0, 0]  # Thanksgiving 2025
+    assert by_day.loc["11-28"].tolist() == [0, 0, 1]  # Friday after
+    assert by_day.loc["12-24"].tolist() == [0, 0, 1]
+    assert by_day.loc["12-25"].tolist() == [1, 0, 0]
+    assert by_day.loc["01-01"].tolist() == [1, 0, 0]
+    assert by_day.loc["12-10"].tolist() == [0, 0, 0]
+    idx = pd.date_range("2026-02-16", periods=24, freq="h", tz=harness.TZ_PJM).tz_convert("UTC")
+    assert (harness.calendar_features(idx)["cal_hol_minor"] == 1).all()  # Presidents' Day

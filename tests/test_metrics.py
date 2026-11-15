@@ -17,3 +17,27 @@ def test_partial_quantiles_score_what_they_can():
     assert set(["cover90_%", "pinball_%"]) <= set(score(full).index)
     assert score(full)["cover90_%"] == 100.0
     assert list(full[QCOLS].columns) == QCOLS
+
+
+def test_dm_and_bootstrap_detect_a_real_gap():
+    """A constant 0.2-point daily gap with noise is significant; pure noise is not."""
+    from gridfc.metrics import block_bootstrap_ci, dm_test
+    rng = np.random.default_rng(0)
+    noise = pd.Series(rng.normal(0, 1, 600))
+    gap = noise + 0.2
+    assert dm_test(gap)["p_two_sided"] < 0.01
+    lo, hi = block_bootstrap_ci(gap)
+    assert lo > 0 and hi > lo
+    assert dm_test(noise)["p_two_sided"] > 0.05
+
+
+def test_peak_scores():
+    from gridfc.metrics import peak_scores
+    t = pd.date_range("2025-07-01 04:00", periods=48, freq="h", tz="UTC")  # 00:00 Eastern
+    y = np.r_[np.arange(24.0), np.arange(24.0)] + 100  # peaks at 23:00 Eastern each day
+    f = y.copy()
+    f[22], f[23] = 130, 100  # day 1: forecast peak at 22:00, 130 vs actual 123
+    d = pd.DataFrame({"target_time": t, "y": y, "mean": f})
+    s = peak_scores(d, "America/New_York")
+    assert s["n_days"] == 2 and s["peak_hour_exact_%"] == 50 and s["peak_hour_MAE_h"] == 0.5
+    assert np.isclose(s["peak_MAPE_%"], (7 / 123 * 100) / 2)
