@@ -11,12 +11,18 @@ Protocol (mirrors how PJM's day-ahead forecast is used):
 A model implements:
   name: str
   refit_every_days: int    # 0 = no fitting needed
+  hist_weather: str        # optional. "forecast" (default) or "actual": in "actual" mode
+                           # the history X shows observed weather (under the forecast
+                           # column names) for hours at least ACTUAL_WX_LAG_D days before
+                           # issue, and the d2 forecast after that. Targets always get
+                           # the d2 forecast. Lets models train on years before 2024.
   fit(y, X)                # y: demand history (hourly Series), X: allowed features
   predict(y, X_hist, X_future) -> DataFrame indexed by target hours with
                            column 'mean' and optionally quantile columns QCOLS
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from .config import DATA_DIR
@@ -27,6 +33,7 @@ DATA_LAG_H = 2
 QUANTILES = [0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95]
 QCOLS = [f"q{int(round(q * 100)):02d}" for q in QUANTILES]
 ALLOWED_WEATHER_PREFIX = "wx_fcst_d2_"
+ACTUAL_WX_LAG_D = 7  # observed weather (reanalysis) is published with a few days' delay
 CLEAN = DATA_DIR / "clean"
 OUT = DATA_DIR / "backtests"
 
@@ -45,13 +52,30 @@ def calendar_features(idx: pd.DatetimeIndex) -> pd.DataFrame:
         "cal_month": local.month,
         "cal_doy": local.dayofyear,
         "cal_weekend": (local.dayofweek >= 5).astype(int),
+        "cal_holiday": holiday_flags(local),
     }, index=idx)
+
+
+def holiday_flags(local: pd.DatetimeIndex) -> np.ndarray:
+    """1 on US federal holidays (observed dates), which PJM load follows."""
+    from pandas.tseries.holiday import USFederalHolidayCalendar
+    days = local.tz_localize(None).normalize()
+    hol = USFederalHolidayCalendar().holidays(days.min(), days.max())
+    return days.isin(hol).astype(int)
 
 
 def allowed_features(frame: pd.DataFrame) -> pd.DataFrame:
     wx = frame[[c for c in frame.columns if c.startswith(ALLOWED_WEATHER_PREFIX)]]
     assert not any(c.startswith("operator") for c in wx.columns)
     return wx.join(calendar_features(frame.index))
+
+
+def actual_weather_history(frame: pd.DataFrame) -> pd.DataFrame:
+    """allowed_features, but with observed weather under the d2 forecast column names."""
+    X = allowed_features(frame)
+    for c in [c for c in X.columns if c.startswith(ALLOWED_WEATHER_PREFIX)]:
+        X[c] = frame["wx_actual_" + c[len(ALLOWED_WEATHER_PREFIX):]]
+    return X
 
 
 def issue_times(start: str, end: str) -> list[pd.Timestamp]:
@@ -69,15 +93,22 @@ def run_backtest(model, frame: pd.DataFrame, start: str, end: str,
                  verbose: bool = True) -> pd.DataFrame:
     y_all = frame["demand"]
     X_all = allowed_features(frame)
+    mode = getattr(model, "hist_weather", "forecast")
+    assert mode in ("forecast", "actual"), mode
+    X_act = actual_weather_history(frame) if mode == "actual" else None
     rows, last_fit = [], None
     issues = issue_times(start, end)
     for i, issue in enumerate(issues):
-        targets = target_hours(issue)
+        # match the frame's time unit: a ns/us mismatch makes each lookup ~1000x slower
+        targets = target_hours(issue).as_unit(y_all.index.unit)
         if targets[-1] > y_all.index[-1]:
             break
         cutoff = issue - pd.Timedelta(hours=DATA_LAG_H)
         y_hist = y_all[:cutoff]
         X_hist = X_all[:cutoff]
+        if X_act is not None:
+            old = issue - pd.Timedelta(days=ACTUAL_WX_LAG_D)
+            X_hist = pd.concat([X_act[:old], X_hist[X_hist.index > old]])
         if model.refit_every_days and (
                 last_fit is None or (issue - last_fit).days >= model.refit_every_days):
             model.fit(y_hist, X_hist)

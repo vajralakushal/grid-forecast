@@ -43,3 +43,32 @@ def test_targets_are_local_day():
     t = harness.target_hours(issue).tz_convert(harness.TZ_PJM)
     assert t[0].hour == 0 and t[-1].hour == 23 and t[0].day == 2
     assert issue.tz_convert(harness.TZ_PJM).hour == 10
+
+
+class ActualSpy(Spy):
+    """In hist_weather='actual' mode: old history shows observed weather, recent history
+    and targets show the d2 forecast. Never any wx_actual_* column names."""
+    hist_weather = "actual"
+
+    def predict(self, y, X_hist, X_future):
+        wx = X_hist["wx_fcst_d2_temperature_2m"]
+        old = X_future.index[0] - pd.Timedelta(days=harness.ACTUAL_WX_LAG_D + 2)
+        assert (wx[:old] == 5.0).all()
+        assert (wx[wx.index > old - pd.Timedelta(days=-2)] == 6.0).all()
+        assert (X_future["wx_fcst_d2_temperature_2m"] == 6.0).all()
+        assert not X_hist.index.duplicated().any()
+        return super().predict(y, X_hist, X_future)
+
+
+def test_actual_weather_history_mode():
+    out = harness.run_backtest(ActualSpy(), make_frame(), "2025-01-20", "2025-01-25", verbose=False)
+    assert len(out) == 6 * 24
+
+
+def test_holiday_flag():
+    idx = pd.date_range("2025-07-03", periods=72, freq="h", tz=harness.TZ_PJM).tz_convert("UTC")
+    cal = harness.calendar_features(idx)
+    local_day = idx.tz_convert(harness.TZ_PJM).day
+    assert (cal["cal_holiday"][local_day == 4] == 1).all()
+    assert (cal["cal_holiday"][local_day != 4] == 0).all()
+

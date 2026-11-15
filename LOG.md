@@ -27,3 +27,18 @@ Newest at the bottom. Plain language.
 - Nov 12: first GitHub Actions run failed: Open-Meteo hung for 120 s from the GitHub runner, and the code didn't retry timeouts. Fixed: retries with backoff on timeouts/429/5xx, a failed city no longer kills the run, the workflow tries 3 times 5 minutes apart, and Python is pinned to 3.12 (`.python-version`).
 - Nov 12: the GitHub Actions ensemble collector succeeded (4.5 min, so some retries were probably needed). It runs daily at 13:17 UTC and saves to the `ensemble-YYYY-MM` release. The data side is done; next is the modeling phase in a new thread.
 - Nov 12: the successful run needed the 5th (last) attempt for 2 cities: Open-Meteo is often slow from GitHub's runners. Added a second pass that retries any failed city after 60 s, plus a test for it.
+
+## Nov 12, 2026: modeling phase starts, first LightGBM
+
+- Harness: models can set `hist_weather = "actual"` to train on observed weather (shown under the d2 forecast column names) for hours more than 7 days before issue, with the d2 forecast after that. Targets always get the d2 forecast. This lets models train on 2019-2023, before weather forecasts exist (Jan 2024). Tests check it. Added a US federal holiday flag to the calendar features.
+- LightGBM (mean + 7 quantiles, refit every 30 days, lags/levels built as of each day's cutoff) run both ways, 2025-01 to 2026-11, same hours as everything else:
+  - `lgbm` (forecast weather, trains from 2024): MAPE 2.94%. PJM is 2.54%. Beats PJM in July (2.55 vs 3.02) and August (2.97 vs 3.08); loses most in winter (Jan 3.90 vs 2.40).
+  - `lgbm_wxact` (actual weather back to 2019): MAPE 3.45%, forecasts 2.7% too low on average. More history hurt: trees can't extrapolate, so old lower load levels drag it down (load growth). Fixing that may change this result.
+  - Intervals are much too narrow: 55% coverage for the 80% interval, 71% for the 90% interval (weekly naive: 80/90). Quantile trees fit on their own training data are overconfident.
+- Runtime: ~35 min for both run side by side. Too slow, mostly thread overhead (8 models x 24 rows/day, two processes fighting over cores), not training.
+- Next: speed fix; predict a ratio to a recent load level instead of raw MWh (for growth); calibrate intervals on out-of-sample errors (conformal); then rerun both ways.
+- Nov 12: full report. `reports/` is gitignored (source, figures, PDFs). `uv run python reports/build.py` recomputes every number from data/backtests and writes `reports/out/report_YYYY-MM-DD.pdf`; one living report, dated copies. Needs xelatex (MacTeX) and the matplotlib dev dependency.
+- Nov 12: winter diagnosis. On days forecast below -5 C, `lgbm` 3.95% MAPE vs PJM 2.34% (33 days). Its first fits had 1 training day that cold: forecast weather starts Jan 20, 2024, at the tail of a Jan 14-21 cold spell. It under-forecast the Jan 20-22, 2025 cold snap by up to 12.6% (actual peak 144.4 GW, lgbm 122.3, PJM 139.3). `lgbm_wxact` (33 cold training days) scored 3.51% on those days. Other bad winter days are holidays (Dec 24, Jan 1, Presidents' Day): one holiday flag is too coarse.
+- Nov 12: speed. Full run of both variants went from ~35 min to 15 min (lgbm 592 s, lgbm_wxact 896 s, in parallel). Fixes: LightGBM n_jobs=1 (fit 31.8 s -> 7.2 s), harness matches timestamp units (pandas 3 makes us, data is ns; each lookup was 152 ms, now 0.1 ms), lag lookups on a recent slice. Forecasts identical to the first run. Training is now most of the time.
+- Nov 12: added a user-level `technical-writing` skill (HumanLayer prose guide + no-LLMism rules + number rules) for all writing.
+

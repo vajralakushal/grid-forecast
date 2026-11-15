@@ -9,3 +9,6 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 .pytest_cache/
+
+# generated reports (source and PDFs stay local)
+reports/
