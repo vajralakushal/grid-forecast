@@ -41,3 +41,15 @@ def test_peak_scores():
     s = peak_scores(d, "America/New_York")
     assert s["n_days"] == 2 and s["peak_hour_exact_%"] == 50 and s["peak_hour_MAE_h"] == 0.5
     assert np.isclose(s["peak_MAPE_%"], (7 / 123 * 100) / 2)
+
+
+def test_spa_finds_a_real_winner_among_noise():
+    """One model truly better than the benchmark among 10 noise models: small p.
+    Ten models with no real edge: large p, even though one of them looks best by luck."""
+    from gridfc.metrics import spa_test
+    rng = np.random.default_rng(1)
+    noise = pd.DataFrame(rng.normal(-0.05, 1, (500, 10)), columns=[f"m{i}" for i in range(10)])
+    assert spa_test(noise, reps=1000)["p_consistent"] > 0.10
+    winner = noise.assign(good=rng.normal(0.25, 1, 500))
+    r = spa_test(winner, reps=1000)
+    assert r["p_consistent"] < 0.01 and r["best_model"] == "good"

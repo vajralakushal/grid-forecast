@@ -3,6 +3,7 @@ name = "grid-forecast"
 version = "0.1.0"
 description = "Probabilistic day-ahead load forecasting for PJM, benchmarked against the operator's own forecast."
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = [
     "requests>=2.31",
     "pandas>=2.1",

@@ -16,7 +16,7 @@ A pretrained time-series model, **Google's TimesFM 3.0, used zero-shot** (never 
 | Copy last week (baseline) | 8.59% | 9.24% | 80.4% |
 
 - **The overall gap is not statistically significant.** The 95% interval for TimesFM's daily MAPE minus PJM's is −0.26 to +0.10 points (Diebold–Mariano p = 0.44).
-- **TimesFM is significantly better in summer** (June–August, by 0.62 points a day, p = 0.001) and **worse in winter** (December–February, by 0.37 points, p = 0.051).
+- **TimesFM is significantly better in summer** (June–August, by 0.62 points a day, p = 0.001) and **worse in winter** (December–February, by 0.37 points, p = 0.051). The summer edge holds up under Hansen's SPA test, which corrects for having picked the best of 11 models (p = 0.001). Overall, the SPA test finds no model that beats PJM (p = 0.23).
 - **PJM forecasts the daily peak much better**, at 1.87% error vs. TimesFM's 2.74%.
 - **No sign of training-data leakage:** on the 70 days after TimesFM 3's release, which cannot be in its training data, it scores 1.89% vs. PJM's 2.26%.
 
@@ -104,13 +104,13 @@ tests/                      offline tests (fake data, stand-in models)
 
 ## Tests
 
-19 offline tests run on every push (CI badge above). They check, among other things:
+20 offline tests run on every push (CI badge above). They check, among other things:
 
 - No model ever sees demand after the cutoff, observed weather, or PJM's forecast.
 - Forecast features are identical whether or not future data exists.
 - The linear model forecasts higher load for a day colder than any training day.
 - Quantile columns map correctly from each pretrained model.
-- The significance test detects a known gap and ignores pure noise.
+- The significance tests (Diebold–Mariano, bootstrap, SPA) detect a known gap and ignore pure noise.
 
 ## Limitations
 
@@ -124,6 +124,10 @@ tests/                      offline tests (fake data, stand-in models)
 - A daily live forecast from GitHub Actions, published with its scores as they come in.
 - More weather inputs (humidity, precipitation, snowfall, pressure) and holiday types for the pretrained models.
 - Training forecast-weather models on NOAA GFS forecasts back to 2021, to cover more cold snaps.
+
+## License
+
+Code: MIT (see `LICENSE`). Data and model weights keep their own terms (see Credits).
 
 ## Credits
 

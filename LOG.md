@@ -64,3 +64,5 @@ Newest at the bottom. Plain language.
 - Model libraries moved to a `models` dependency group; the ensemble collector installs only the core (`uv sync --no-default-groups`). Linux gets CPU-only torch (no CUDA downloads in Actions).
 - CI (`.github/workflows/ci.yml`) runs the offline tests on every push. README rewritten with results; `scripts/readme_figures.py` draws its figures.
 - Repo made public. Data stays EIA + Open-Meteo so anyone can reproduce results.
+- Hansen's SPA test (11 candidates vs PJM, daily MAPE, stationary bootstrap, mean block 7 days, 5,000 reps): overall p = 0.229 (no model beats PJM), winter p = 1.000, summer p = 0.001 (best: `timesfm3`). The summer edge survives the correction for searching over models; season picked after looking, x4 seasons still 0.004.
+- Added MIT license.

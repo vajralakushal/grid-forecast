@@ -97,3 +97,47 @@ def peak_scores(df: pd.DataFrame, tz: str) -> pd.Series:
         "peak_hour_exact_%": (hours_off == 0).mean() * 100,
         "peak_hour_within1_%": (hours_off <= 1).mean() * 100,
     })
+
+
+def stationary_bootstrap_index(n: int, reps: int, block: float, rng) -> np.ndarray:
+    """Politis-Romano stationary bootstrap: runs of random length (mean `block`), wrapping."""
+    idx = np.empty((reps, n), dtype=int)
+    idx[:, 0] = rng.integers(0, n, reps)
+    new_run = rng.random((reps, n)) < 1 / block
+    starts = rng.integers(0, n, (reps, n))
+    for t in range(1, n):
+        idx[:, t] = np.where(new_run[:, t], starts[:, t], (idx[:, t - 1] + 1) % n)
+    return idx
+
+
+def spa_test(gain: pd.DataFrame, block: float = 7, reps: int = 5000, seed: int = 0) -> dict:
+    """Hansen's (2005) test for superior predictive ability.
+
+    gain: one row per day, one column per candidate model, value = benchmark loss minus
+    model loss (positive = the model beat the benchmark that day). Null hypothesis: no
+    candidate is better than the benchmark. Unlike a test on the single best model, it
+    accounts for having searched over all the candidates, so picking the winner after
+    the fact does not make the result look stronger than it is.
+
+    Returns the consistent p-value plus Hansen's lower and upper bounds.
+    """
+    d = gain.dropna().values
+    n, k = d.shape
+    dbar = d.mean(axis=0)
+    rng = np.random.default_rng(seed)
+    boot = d[stationary_bootstrap_index(n, reps, block, rng)].mean(axis=1)  # reps x k
+    omega = np.sqrt(n * boot.var(axis=0))
+    t_obs = max((np.sqrt(n) * dbar / omega).max(), 0)
+    # The null puts every model's true gain at zero (upper: the conservative "reality
+    # check"). Models clearly worse than the benchmark are shifted down by their own
+    # loss so they can't inflate the null (consistent); lower shifts every losing model.
+    clearly_worse = np.sqrt(n) * dbar / omega < -np.sqrt(2 * np.log(np.log(n)))
+    shifts = {"consistent": np.where(clearly_worse, dbar, 0), "lower": np.minimum(dbar, 0),
+              "upper": np.zeros(k)}
+    out = {"n_days": n, "n_models": k, "t_stat": t_obs,
+           "best_model": gain.columns[int(np.argmax(dbar / omega))]}
+    for name, mu in shifts.items():
+        z = np.sqrt(n) * (boot - dbar + mu) / omega
+        t_boot = np.maximum(z.max(axis=1), 0)
+        out[f"p_{name}"] = float((t_boot >= t_obs).mean())
+    return out
