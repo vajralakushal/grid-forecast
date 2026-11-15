@@ -72,3 +72,21 @@ def test_holiday_flag():
     assert (cal["cal_holiday"][local_day == 4] == 1).all()
     assert (cal["cal_holiday"][local_day != 4] == 0).all()
 
+
+class GapSpy(Spy):
+    """future_from_cutoff: X_future starts the hour after the demand cutoff, holds only
+    allowed columns, and the harness keeps only day D's 24 hours of the prediction."""
+    future_from_cutoff = True
+
+    def predict(self, y, X_hist, X_future):
+        self._check(y, X_hist)
+        assert X_future.index[0] == y.index[-1] + pd.Timedelta(hours=1)
+        assert "operator_fcst" not in X_future.columns
+        assert not any(c.startswith("wx_actual") for c in X_future.columns)
+        return pd.DataFrame({"mean": 1.0}, index=X_future.index)
+
+
+def test_future_from_cutoff():
+    out = harness.run_backtest(GapSpy(), make_frame(), "2025-01-10", "2025-01-12", verbose=False)
+    assert len(out) == 3 * 24
+    assert out["lead_h"].between(14, 38).all()

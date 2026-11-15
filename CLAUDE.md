@@ -21,6 +21,7 @@ Day-ahead electricity demand forecasting for PJM, benchmarked against PJM's own 
 | `uv run python -m gridfc.check_data` | Coverage, gaps, and PJM forecast error vs. weekly naive (raw data) |
 | `uv run python -m gridfc.clean` | Screen bad values, build `data/clean/` (pjm, subba, weather, flags.csv) |
 | `uv run python -m gridfc.backtest --model all` | Run models + operator benchmark through the harness |
+| `uv run python -m gridfc.backtest --model NAME --no-benchmark` | One model; use when running several in parallel |
 | `uv run python -m gridfc.report [--by year/month/lead/hour]` | Compare all saved backtests on the same hours |
 | `uv run python -m gridfc.collect_ensemble` | Snapshot ensemble weather (GitHub Actions runs this daily) |
 | `uv run pytest` | Offline tests |

@@ -42,3 +42,15 @@ Newest at the bottom. Plain language.
 - Nov 12: speed. Full run of both variants went from ~35 min to 15 min (lgbm 592 s, lgbm_wxact 896 s, in parallel). Fixes: LightGBM n_jobs=1 (fit 31.8 s -> 7.2 s), harness matches timestamp units (pandas 3 makes us, data is ns; each lookup was 152 ms, now 0.1 ms), lag lookups on a recent slice. Forecasts identical to the first run. Training is now most of the time.
 - Nov 12: added a user-level `technical-writing` skill (HumanLayer prose guide + no-LLMism rules + number rules) for all writing.
 
+## Nov 15, 2026: six more model families
+
+- New models, all through the harness: `linear` (ridge per hour on degree-hours), `lgbm_linear` (linear leaves), `mstl`, `prophet`, and two pretrained models used zero-shot, Chronos-2 and TimesFM 3.0 (each with and without weather inputs). Harness option `future_from_cutoff` gives sequence models d2 weather for the 15 hours between the 08:00 cutoff and day D (all issued before 10:00, so honest). Metrics score 80% coverage even when q05/q95 are missing (TimesFM has deciles only). `backtest --no-benchmark` for parallel runs.
+- Results, 16,207 hours, 2025-01-01 to 2026-11-10 (hours with a weather forecast):
+  - `timesfm3` 2.47% MAPE vs PJM 2.54%: first model to beat PJM overall, without training on PJM data. 80% coverage 82.4%. After its Aug 2026 release (Sep 1-Nov 10, 1,677 h): 1.89% vs PJM 2.26%, so not explained by leakage, but that's 70 autumn days.
+  - `chronos2` 3.08%, `lgbm_linear` 2.93%, `lgbm` 2.94%, `linear` 3.25%, `prophet` 5.87%, `mstl` 6.14%. Without weather the pretrained models score 4.82-4.89%.
+  - Winter: PJM 2.38%, `timesfm3` 2.75%, `chronos2` 2.83%, `lgbm` 3.54%. Days below -5 C: PJM 2.34%, `chronos2` 2.50%, `timesfm3` 2.81%, `linear` 3.98%. Extrapolating in temperature (`linear`, `lgbm_linear`) did not fix cold days; the pretrained models did. Jan 20-22, 2025 peak 144.4 GW: `timesfm3` 142.6, PJM 139.3, `lgbm` 122.3.
+  - By hour: `timesfm3` wins overnight (1.8% vs PJM up to 3.9%), PJM wins every hour 11:00-23:00.
+- `lgbm_linear` quantiles were broken (q05 down to -157,766 MWh; linear leaves are least squares regardless of objective), so it is mean-only now.
+- Run time: 8 backtests in parallel in ~18 min; `timesfm3` 818 s, `chronos2` 520 s (CPU, 2 threads each).
+- Part 2 report: `uv run python reports/build_models.py` -> `reports/out/models_YYYY-MM-DD.pdf`.
+- Next: live daily forecasts this winter (timesfm3, chronos2, lgbm, a fixed average) saved before actuals arrive, as the clean test; better covariates for the pretrained models; drop Prophet and MSTL.

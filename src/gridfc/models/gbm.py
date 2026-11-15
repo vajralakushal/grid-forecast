@@ -65,6 +65,10 @@ class LightGBMQuantile:
         f, target = f[ok], target[ok]
         self.columns = list(f.columns)
         self.models = {"mean": lgb.LGBMRegressor(objective="l2", **self.params).fit(f, target)}
+        if self.params.get("linear_tree"):
+            # linear leaves are fit by least squares whatever the objective, so quantile
+            # models come out broken (q05 below zero); keep the mean forecast only
+            return
         for q, c in zip(QUANTILES, QCOLS):
             self.models[c] = lgb.LGBMRegressor(objective="quantile", alpha=q,
                                                **self.params).fit(f, target)
@@ -72,5 +76,6 @@ class LightGBMQuantile:
     def predict(self, y, X_hist, X_future):
         f = day_ahead_features(y, X_future)[self.columns]
         out = pd.DataFrame({k: m.predict(f) for k, m in self.models.items()}, index=f.index)
-        out[QCOLS] = np.sort(out[QCOLS].values, axis=1)
+        if len(self.models) > 1:
+            out[QCOLS] = np.sort(out[QCOLS].values, axis=1)
         return out

@@ -11,6 +11,11 @@ Protocol (mirrors how PJM's day-ahead forecast is used):
 A model implements:
   name: str
   refit_every_days: int    # 0 = no fitting needed
+  future_from_cutoff: bool # optional. True: X_future starts the hour after the demand
+                           # cutoff instead of at day D, so sequence models get weather
+                           # for the gap too. Every wx_fcst_d2 value for those hours was
+                           # issued ~2 days earlier, so before the issue time. Rows
+                           # before day D are dropped from the prediction.
   hist_weather: str        # optional. "forecast" (default) or "actual": in "actual" mode
                            # the history X shows observed weather (under the forecast
                            # column names) for hours at least ACTUAL_WX_LAG_D days before
@@ -113,7 +118,10 @@ def run_backtest(model, frame: pd.DataFrame, start: str, end: str,
                 last_fit is None or (issue - last_fit).days >= model.refit_every_days):
             model.fit(y_hist, X_hist)
             last_fit = issue
-        pred = model.predict(y_hist, X_hist, X_all.reindex(targets))
+        future = targets
+        if getattr(model, "future_from_cutoff", False):
+            future = pd.date_range(cutoff + pd.Timedelta(hours=1), targets[-1], freq="h")
+        pred = model.predict(y_hist, X_hist, X_all.reindex(future))
         pred = pred.reindex(targets)
         pred["issue_time"] = issue
         pred["target_time"] = targets

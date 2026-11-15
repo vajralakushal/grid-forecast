@@ -2,6 +2,7 @@
 
   uv run python -m gridfc.backtest --model weekly_naive
   uv run python -m gridfc.backtest --model all --start 2025-01-01
+  uv run python -m gridfc.backtest --model linear --no-benchmark   # parallel runs
 
 Each model writes data/backtests/<name>.parquet, so models can run in parallel
 (separate terminals or machines) and be compared later with gridfc.report.
@@ -17,16 +18,20 @@ def main():
     ap.add_argument("--model", default="all", help=f"one of {list(REGISTRY)} or 'all'")
     ap.add_argument("--start", default="2025-01-01", help="first target day (Eastern)")
     ap.add_argument("--end", default="2100-01-01", help="last target day (Eastern)")
+    ap.add_argument("--no-benchmark", action="store_true",
+                    help="don't rewrite the PJM benchmark files (use when running in parallel)")
     args = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
     frame = load_frame()
     end = min(args.end, str(frame.index[-1].date()))
 
-    operator_benchmark(frame, args.start, end).to_parquet(OUT / "pjm_operator.parquet", index=False)
-    operator_benchmark(frame, args.start, end, column="operator_fcst",
-                       name="pjm_operator_as_published").to_parquet(
-        OUT / "pjm_operator_as_published.parquet", index=False)
+    if not args.no_benchmark:
+        operator_benchmark(frame, args.start, end).to_parquet(OUT / "pjm_operator.parquet",
+                                                              index=False)
+        operator_benchmark(frame, args.start, end, column="operator_fcst",
+                           name="pjm_operator_as_published").to_parquet(
+            OUT / "pjm_operator_as_published.parquet", index=False)
 
     names = list(REGISTRY) if args.model == "all" else [args.model]
     for name in names:
